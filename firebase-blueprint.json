@@ -1,0 +1,90 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role differentiation (teacher or student)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID", "maxLength": 128 },
+        "email": { "type": "string", "description": "Email address", "maxLength": 200 },
+        "fullName": { "type": "string", "description": "Full name of the user", "maxLength": 100 },
+        "role": { "type": "string", "enum": ["teacher", "student"], "description": "Account role" },
+        "createdAt": { "type": "string", "description": "Account creation ISO timestamp", "maxLength": 64 }
+      },
+      "required": ["uid", "email", "fullName", "role", "createdAt"]
+    },
+    "Exam": {
+      "title": "Exam",
+      "description": "Online exam created by teachers with multiple choice and True/False questions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier of exam", "maxLength": 128 },
+        "title": { "type": "string", "description": "Exam title", "maxLength": 200 },
+        "description": { "type": "string", "description": "Description or instructions", "maxLength": 2000 },
+        "subject": { "type": "string", "description": "Subject/Course name", "maxLength": 100 },
+        "grade": { "type": "string", "description": "Grade or Class level", "maxLength": 50 },
+        "durationMinutes": { "type": "number", "description": "Exam duration in minutes" },
+        "teacherId": { "type": "string", "description": "Teacher author UID", "maxLength": 128 },
+        "teacherName": { "type": "string", "description": "Teacher author name", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["published", "draft", "closed"], "description": "Exam publishing state" },
+        "questions": { "type": "array", "description": "Array of exam questions (max 200)" },
+        "createdAt": { "type": "string", "description": "Created ISO timestamp", "maxLength": 64 },
+        "updatedAt": { "type": "string", "description": "Last updated ISO timestamp", "maxLength": 64 }
+      },
+      "required": ["id", "title", "subject", "grade", "durationMinutes", "teacherId", "teacherName", "status", "questions", "createdAt"]
+    },
+    "Submission": {
+      "title": "Submission",
+      "description": "Student test submission with scores, answers, and timestamps",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique submission ID", "maxLength": 128 },
+        "examId": { "type": "string", "description": "Referenced Exam ID", "maxLength": 128 },
+        "examTitle": { "type": "string", "description": "Exam title at time of submission", "maxLength": 200 },
+        "teacherId": { "type": "string", "description": "Author teacher UID of the exam", "maxLength": 128 },
+        "studentId": { "type": "string", "description": "Student Auth UID", "maxLength": 128 },
+        "studentName": { "type": "string", "description": "Student full name", "maxLength": 100 },
+        "studentEmail": { "type": "string", "description": "Student email address", "maxLength": 200 },
+        "score": { "type": "number", "description": "Calculated score on a 10.0 scale" },
+        "earnedRawPoints": { "type": "number", "description": "Raw earned points" },
+        "totalMaxRawPoints": { "type": "number", "description": "Max raw points" },
+        "correctCount": { "type": "number", "description": "Number of fully correct questions" },
+        "totalCount": { "type": "number", "description": "Total question count" },
+        "accuracyRate": { "type": "number", "description": "Accuracy rate 0-100" },
+        "durationSpentSeconds": { "type": "number", "description": "Time spent in seconds" },
+        "answers": { "type": "object", "description": "Map of questionId to student answers" },
+        "details": { "type": "array", "description": "Detailed question breakdown" },
+        "submittedAt": { "type": "string", "description": "Submission ISO timestamp", "maxLength": 64 }
+      },
+      "required": ["id", "examId", "examTitle", "studentId", "studentName", "studentEmail", "score", "earnedRawPoints", "totalMaxRawPoints", "correctCount", "totalCount", "accuracyRate", "durationSpentSeconds", "answers", "details", "submittedAt"]
+    },
+    "BrandingSetting": {
+      "title": "BrandingSetting",
+      "description": "Custom application logo configuration",
+      "type": "object",
+      "properties": {
+        "logoUrl": { "type": "string", "description": "Logo URL or data URL", "maxLength": 900000 },
+        "updatedAt": { "type": "string", "description": "Last updated ISO timestamp", "maxLength": 64 }
+      },
+      "required": ["updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile records with role access"
+    },
+    "/exams/{examId}": {
+      "schema": "Exam",
+      "description": "Exams collection created by teachers and taken by students"
+    },
+    "/submissions/{submissionId}": {
+      "schema": "Submission",
+      "description": "Student test submission records and grades"
+    },
+    "/settings/{settingId}": {
+      "schema": "BrandingSetting",
+      "description": "Application-wide settings including branding logo"
+    }
+  }
+}

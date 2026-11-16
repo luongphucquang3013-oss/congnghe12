@@ -1,0 +1,180 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core helper primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Bootstrapped admin via verified email token (no DB read required, safe in list queries)
+    function isAdminToken() {
+      return isVerifiedUser() && request.auth.token.email == 'luongphucquang3013@stuni.edu.pl';
+    }
+
+    // Teacher check for single-doc reads and writes
+    function isTeacher() {
+      return isAdminToken() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher'
+      );
+    }
+
+    // Validation blueprints
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'fullName', 'role', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'fullName', 'role', 'createdAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.email is string && data.email.size() <= 200 &&
+        data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 100 &&
+        data.role in ['teacher', 'student'] &&
+        data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidExam(data) {
+      return data.keys().hasAll(['id', 'title', 'subject', 'grade', 'durationMinutes', 'teacherId', 'teacherName', 'status', 'questions', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'title', 'description', 'subject', 'grade', 'durationMinutes', 'teacherId', 'teacherName', 'status', 'questions', 'createdAt', 'updatedAt']) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+        data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 100 &&
+        data.grade is string && data.grade.size() >= 1 && data.grade.size() <= 50 &&
+        data.durationMinutes is number && data.durationMinutes >= 1 && data.durationMinutes <= 600 &&
+        data.teacherId is string && data.teacherId.size() >= 1 && data.teacherId.size() <= 128 &&
+        data.teacherName is string && data.teacherName.size() >= 1 && data.teacherName.size() <= 100 &&
+        data.status in ['published', 'draft', 'closed'] &&
+        data.questions is list && data.questions.size() >= 1 && data.questions.size() <= 200 &&
+        data.questions[0] is map &&
+        data.createdAt is string && data.createdAt.size() <= 64 &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    function isValidSubmission(data) {
+      return data.keys().hasAll(['id', 'examId', 'examTitle', 'studentId', 'studentName', 'studentEmail', 'score', 'earnedRawPoints', 'totalMaxRawPoints', 'correctCount', 'totalCount', 'accuracyRate', 'durationSpentSeconds', 'answers', 'details', 'submittedAt']) &&
+        data.keys().hasOnly(['id', 'examId', 'examTitle', 'teacherId', 'studentId', 'studentName', 'studentEmail', 'score', 'earnedRawPoints', 'totalMaxRawPoints', 'correctCount', 'totalCount', 'accuracyRate', 'durationSpentSeconds', 'answers', 'details', 'submittedAt']) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        data.examId is string && data.examId.size() >= 1 && data.examId.size() <= 128 &&
+        data.examTitle is string && data.examTitle.size() >= 1 && data.examTitle.size() <= 200 &&
+        (!('teacherId' in data) || (data.teacherId is string && data.teacherId.size() <= 128)) &&
+        data.studentId is string && data.studentId.size() >= 1 && data.studentId.size() <= 128 &&
+        data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 100 &&
+        data.studentEmail is string && data.studentEmail.size() <= 200 &&
+        data.score is number && data.score >= 0 && data.score <= 10 &&
+        data.earnedRawPoints is number && data.earnedRawPoints >= 0 &&
+        data.totalMaxRawPoints is number && data.totalMaxRawPoints >= 0 &&
+        data.correctCount is number && data.correctCount >= 0 &&
+        data.totalCount is number && data.totalCount >= 0 &&
+        data.accuracyRate is number && data.accuracyRate >= 0 && data.accuracyRate <= 100 &&
+        data.durationSpentSeconds is number && data.durationSpentSeconds >= 0 &&
+        data.answers is map &&
+        data.details is list && data.details.size() <= 200 &&
+        data.submittedAt is string && data.submittedAt.size() <= 64;
+    }
+
+    function isValidBranding(data) {
+      return data.keys().hasAll(['updatedAt']) &&
+        data.keys().hasOnly(['logoUrl', 'updatedAt']) &&
+        (!('logoUrl' in data) || data.logoUrl == null || (data.logoUrl is string && data.logoUrl.size() <= 900000)) &&
+        data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
+    // User profiles: PII isolated to owner or teacher
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isTeacher());
+      allow list: if isSignedIn() && (existing().uid == request.auth.uid || isAdminToken());
+      allow create: if isValidId(userId) &&
+        isVerifiedUser() &&
+        isOwner(userId) &&
+        isValidUser(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        (incoming().role == 'student' || isAdminToken());
+      allow update: if isValidId(userId) &&
+        isVerifiedUser() &&
+        isValidUser(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          (isOwner(userId) && incoming().role == existing().role && incoming().diff(existing()).affectedKeys().hasOnly(['fullName'])) ||
+          (isAdminToken() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'fullName']))
+        );
+      allow delete: if false;
+    }
+
+    // Exams collection
+    match /exams/{examId} {
+      allow get: if isValidId(examId) && isSignedIn() && (existing().status == 'published' || existing().teacherId == request.auth.uid || isTeacher());
+      allow list: if isSignedIn() && (existing().status == 'published' || existing().teacherId == request.auth.uid || isAdminToken());
+      allow create: if isValidId(examId) &&
+        isVerifiedUser() &&
+        isValidExam(incoming()) &&
+        incoming().id == examId &&
+        incoming().teacherId == request.auth.uid &&
+        isTeacher();
+      allow update: if isValidId(examId) &&
+        isVerifiedUser() &&
+        isValidExam(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().teacherId == existing().teacherId &&
+        incoming().createdAt == existing().createdAt &&
+        isTeacher() &&
+        (existing().teacherId == request.auth.uid || isAdminToken()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'subject', 'grade', 'durationMinutes', 'teacherName', 'status', 'questions', 'updatedAt']);
+      allow delete: if isValidId(examId) &&
+        isVerifiedUser() &&
+        isTeacher() &&
+        (existing().teacherId == request.auth.uid || isAdminToken());
+    }
+
+    // Submissions collection (immutable after submission)
+    match /submissions/{submissionId} {
+      allow get: if isValidId(submissionId) && isSignedIn() && (existing().studentId == request.auth.uid || existing().teacherId == request.auth.uid || isTeacher());
+      allow list: if isSignedIn() && (existing().studentId == request.auth.uid || existing().teacherId == request.auth.uid || isAdminToken());
+      allow create: if isValidId(submissionId) &&
+        isVerifiedUser() &&
+        isValidSubmission(incoming()) &&
+        incoming().id == submissionId &&
+        incoming().studentId == request.auth.uid &&
+        exists(/databases/$(database)/documents/exams/$(incoming().examId));
+      allow update: if false;
+      allow delete: if isValidId(submissionId) &&
+        isVerifiedUser() &&
+        isTeacher() &&
+        (existing().teacherId == request.auth.uid || isAdminToken());
+    }
+
+    // Application branding settings
+    match /settings/{settingId} {
+      allow get: if isValidId(settingId) && settingId == 'branding' && isSignedIn();
+      allow list: if false;
+      allow create: if isValidId(settingId) && settingId == 'branding' && isVerifiedUser() && isTeacher() && isValidBranding(incoming());
+      allow update: if isValidId(settingId) && settingId == 'branding' && isVerifiedUser() && isTeacher() && isValidBranding(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['logoUrl', 'updatedAt']);
+      allow delete: if false;
+    }
+  }
+}
