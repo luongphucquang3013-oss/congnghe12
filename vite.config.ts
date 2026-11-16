@@ -5,6 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    base: '/congnghe12/',
     base: process.env.GITHUB_PAGES === 'true' ? '/meonghiendien/' : '/',
     plugins: [react(), tailwindcss()],
     resolve: {
